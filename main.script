@@ -1,0 +1,201 @@
+-- Логування у файл
+local function log_in_file(msg)
+	local file = io.open("loging.txt", "a")
+	file:write(msg)
+	file:close(file)
+end
+
+-- Форматований вивід таблиці
+local function tb_out(o)
+	if type(o) == 'table' then
+		local s = '{ '
+		for k, v in pairs(o) do
+			if type(k) ~= 'number' then k = '"' .. k .. '"' end
+			s = s .. '[' .. k .. '] = ' .. tb_out(v) .. ','
+		end
+		return s .. '} '
+	else
+		return tostring(o)
+	end
+end
+
+local function get_param(args, type_params)
+	if args == nil or arg == "" then
+		return {}
+	end
+
+	local split_args = {}
+	for str in string.gmatch(args, "([^" .. ' ' .. "]+)") do
+		table.insert(split_args, str)
+	end
+
+	local conver_2type_args = {}
+	for i, item in pairs(type_params) do
+		if item == "int" then table.insert(conver_2type_args, tonumber(split_args[i], 10)) end
+		if item == "num" then table.insert(conver_2type_args, tonumber(split_args[i])) end
+		if item == "str" then table.insert(conver_2type_args, split_args[i]) end
+	end
+	return conver_2type_args
+end
+
+
+body_part_info = {
+	["head"] = 		{	maxhp = 10, 	bone_id = {19, 17, 16, 15, 14}, 	critical = true, 	limit_critical_hit = 0.5	},
+	["thorax"] = 	{	maxhp = 25, 	bone_id = {13, 12, 11, 2} , 		critical = false, 	limit_critical_hit = 0.5	},
+	["leftarm"] = 	{	maxhp = 11.25, 	bone_id = {20, 21, 22, 23}, 		critical = false, 	limit_critical_hit = 0.5	},
+	["rightarm"] = 	{	maxhp = 11.25, 	bone_id = {33, 34, 35, 36}, 		critical = false, 	limit_critical_hit = 0.5	},
+	["leftleg"] = 	{	maxhp = 11.25, 	bone_id = {3 ,4}, 					critical = false, 	limit_critical_hit = 0.5	},
+	["rightleg"] = 	{	maxhp = 11.25, 	bone_id = {7 ,8}, 					critical = false, 	limit_critical_hit = 0.5	},
+}
+
+local maxhp = {}
+local hitboxes = {}
+local health = {}
+
+
+local function health_init()
+
+	--init performans tables
+	for i,v in pairs(body_part_info) do
+		for k,v in pairs(body_part_info[i].bone_id) do
+			hitboxes[v] = i
+		end
+		health[i] = body_part_info[i].maxhp
+		maxhp[i] = body_part_info[i].maxhp
+	end
+end
+
+
+-- Description: 		save & load health
+-- Create: kizukkk : 	11/4/23
+-- Last Update: 		11/5/23
+local function load_health()
+
+	for i, k in pairs(health) do
+		local dest = string.format("health[%s]", i)
+		loaded = load_var(db.actor, dest)
+		if (loaded ~= nil) then
+			log_in_file(string.format("health[%s] :: Loaded value <%.2f> from db.storage\n", i, loaded))
+			health[i] = loaded
+		end
+	end
+end
+local function save_health()
+	for i, k in pairs(health) do
+		local dest = string.format("health[%s]", i)
+		save_var(db.actor, dest, k)
+		log_in_file(string.format("health[%s] :: Saved value <%.2f> to db.storage\n", i, k))
+	end
+end
+
+-- Description: 		hit debug
+-- Create: kizukkk : 	11/6/23
+-- Last Update: 		11/7/23
+-- hit_to_actor(nil,"2 6 0.05", db.actor,nil)
+local function hit_to_actor(me, txt, owner, p)
+	-- bone_id, type_hit, power,
+	local arguments_types = { "num", "num", "num" }
+	args = get_param(txt, arguments_types)
+
+	if #args < #arguments_types then
+		owner:SendOutput("!ERROR: ArgumentError:: hit_bp <str> <num>")
+	end
+
+	bone_id = args[1]
+	hit_type = args[2]
+	hit_power = args[3]
+
+	local hit = hit()
+	hit.type = hit_type
+	hit.power = hit_power
+	hit:bone("bip01_head")
+	hit.draftsman = db.actor
+	hit.impulse = 1000
+
+	hit_out = string.format("[body_part = %s; type = %d; power = %.2f]", hitboxes[bone_id], hit_type, hit_power)
+	msg = string.format("Hit to actor:\n\t%s\n", hit_out)
+	log_in_file(msg)
+
+	db.actor:hit(hit)
+end
+
+local function kill_actor()
+	for i, k in pairs(health) do
+		health[i] = 0
+	end
+	db.actor:kill(db.actor)
+end
+
+local function damage_to_body_parts(damage, redux_damage, bone_id)
+
+	if hitboxes[bone_id] == "head" then
+		damage_converto10 = damage * 100
+		redux_damage_converto10 = redux_damage * 100
+
+		if (redux_damage_converto10 < maxhp.head * 0.5) then
+			if health.head == 0 then 
+				kill_actor()
+				return true
+			end
+			db.actor.health = db.actor.health - (health.head/100 - redux_damage)
+			health.head = 0
+		else
+			kill_actor()
+			return true
+		end 
+	end
+	save_health()
+end
+
+
+
+local function actor_on_hit(obj, amount, direction, who, bone_id)
+	msg = string.format("[amount: %.2f; bone: %d]", amount, bone_id)
+	printf(msg)
+
+
+	local main_last_hp = db.actor.health
+
+	local BPS = 0
+	for i,v in pairs(health) do 
+		BPS = BPS + v
+	end 
+
+	CreateTimeEvent("hit_damage", db.actor, 0, function ()
+		redux_damage = main_last_hp - db.actor.health
+		damage_to_body_parts(amount, redux_damage, bone_id)
+		return true
+	end)
+
+
+	msg = string.format("Main HP: %.2f\nBPS HP: %.2f, Damage: %.2f", main_last_hp, BPS, amount)
+	printf(msg)
+end
+
+
+
+local function init(me, txt, owner, p)
+	db.actor.health = 1
+end
+
+local function health_out()
+	msg = string.format("Main HP: %.2f", db.actor.health)
+	printf(msg)
+	printf(tb_out(health))
+end
+
+local function on_key_press(dik)
+	if dik == DIK_keys.DIK_H then 
+		hit_to_actor(nil,"2 6 0.05", db.actor,nil)
+	end
+end
+function on_game_start()
+	health_init()
+	_g.add_console_command("hit", hit_to_actor)
+	_g.add_console_command("init_", init)
+	_g.add_console_command("health", health_out)
+
+	--RegisterScriptCallback("actor_on_first_update", load_health)
+	RegisterScriptCallback("actor_on_hit_callback", actor_on_hit)
+	RegisterScriptCallback("on_key_press",on_key_press)
+end
