@@ -94,6 +94,11 @@ end
 -- hit_to_actor(nil,"2 6 0.05", db.actor,nil)
 local function hit_to_actor(me, txt, owner, p)
 	-- bone_id, type_hit, power,
+	printf(me)
+	printf(txt)
+	printf(tostring(owner == db.actor))
+	printf(type(p))
+	
 	local arguments_types = { "num", "num", "num" }
 	args = get_param(txt, arguments_types)
 
@@ -118,6 +123,8 @@ local function hit_to_actor(me, txt, owner, p)
 
 	db.actor:hit(hit)
 end
+
+
 
 local function kill_actor()
 	for i, k in pairs(health) do
@@ -192,10 +199,11 @@ end
 function on_game_start()
 	health_init()
 	_g.add_console_command("hit", hit_to_actor)
+	_g.add_console_command("hit2", hit_to_actor)
 	_g.add_console_command("init_", init)
 	_g.add_console_command("health", health_out)
 
 	--RegisterScriptCallback("actor_on_first_update", load_health)
-	RegisterScriptCallback("actor_on_hit_callback", actor_on_hit)
+	--RegisterScriptCallback("actor_on_hit_callback", actor_on_hit)
 	RegisterScriptCallback("on_key_press",on_key_press)
 end
